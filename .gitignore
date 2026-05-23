@@ -1,26 +1,23 @@
-# Dependencies
-node_modules/
-.venv/
-venv/
-
 # Python
 __pycache__/
 *.py[cod]
-*.pyo
+.venv/
+venv/
+
+# Local data and logs
+backend/data/
+*.sqlite
+*.sqlite3
+*.db
+*.log
 
 # Environment and local secrets
 .env
 .env.*
 !.env.example
 
-# Local data and logs
-.data/
-*.log
-*.sqlite
-*.sqlite3
-*.db
-
-# Frontend build output
+# Frontend dependencies/build output
+node_modules/
 dist/
 
 # OS/editor files
