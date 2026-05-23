@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import mimetypes
+from base64 import b64encode
 from pathlib import Path
 
+import httpx
 from google import genai
 from google.genai import types
 from sqlmodel import Session
@@ -51,15 +53,97 @@ def _normalize_result(payload: dict) -> tuple[str, list[str]]:
     return summary[:120], keywords[:10]
 
 
+def _missing_config_error() -> str | None:
+    if settings.ai_provider == "openai":
+        if not settings.openai_api_key:
+            return "OPENAI_API_KEY 未配置"
+        if not settings.openai_model:
+            return "OPENAI_MODEL 未配置"
+        if not settings.openai_base_url:
+            return "OPENAI_BASE_URL 未配置"
+        return None
+    if not settings.gemini_api_key:
+        return "GEMINI_API_KEY 未配置"
+    return None
+
+
+def _analyze_with_gemini(card: Card) -> dict:
+    client = genai.Client(api_key=settings.gemini_api_key)
+    contents: list[object]
+    if card.type == "image":
+        if not card.image_filename:
+            raise ValueError("图片文件不存在")
+        image_path = Path(settings.upload_dir) / card.image_filename
+        mime_type = mimetypes.guess_type(image_path.name)[0] or "image/png"
+        contents = [
+            IMAGE_PROMPT,
+            types.Part.from_bytes(data=image_path.read_bytes(), mime_type=mime_type),
+        ]
+    else:
+        contents = [TEXT_PROMPT, card.text_content or ""]
+
+    response = client.models.generate_content(
+        model=settings.gemini_model,
+        contents=contents,
+        config=types.GenerateContentConfig(response_mime_type="application/json"),
+    )
+    return _clean_json(response.text or "{}")
+
+
+def _openai_content(card: Card) -> list[dict]:
+    if card.type == "image":
+        if not card.image_filename:
+            raise ValueError("图片文件不存在")
+        image_path = Path(settings.upload_dir) / card.image_filename
+        mime_type = mimetypes.guess_type(image_path.name)[0] or "image/png"
+        data_url = f"data:{mime_type};base64,{b64encode(image_path.read_bytes()).decode('ascii')}"
+        return [
+            {"type": "text", "text": IMAGE_PROMPT},
+            {"type": "image_url", "image_url": {"url": data_url}},
+        ]
+    return [{"type": "text", "text": f"{TEXT_PROMPT}\n\n用户文本：\n{card.text_content or ''}"}]
+
+
+def _analyze_with_openai_compatible(card: Card) -> dict:
+    payload = {
+        "model": settings.openai_model,
+        "messages": [{"role": "user", "content": _openai_content(card)}],
+        "temperature": 0.2,
+        "response_format": {"type": "json_object"},
+    }
+    headers = {"Authorization": f"Bearer {settings.openai_api_key}"}
+    url = f"{settings.openai_base_url}/chat/completions"
+
+    with httpx.Client(timeout=60) as client:
+        response = client.post(url, headers=headers, json=payload)
+        if response.status_code == 400 and "response_format" in response.text:
+            payload.pop("response_format", None)
+            response = client.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        data = response.json()
+
+    content = data["choices"][0]["message"].get("content") or "{}"
+    return _clean_json(content)
+
+
+def _analyze_with_provider(card: Card) -> dict:
+    if settings.ai_provider == "openai":
+        return _analyze_with_openai_compatible(card)
+    if settings.ai_provider != "gemini":
+        raise ValueError(f"不支持的 AI_PROVIDER: {settings.ai_provider}")
+    return _analyze_with_gemini(card)
+
+
 def analyze_card(card_id: str) -> None:
     with Session(engine) as session:
         card = session.get(Card, card_id)
         if not card:
             return
 
-        if not settings.gemini_api_key:
+        config_error = _missing_config_error()
+        if config_error:
             card.ai_status = "failed"
-            card.ai_error = "GEMINI_API_KEY 未配置"
+            card.ai_error = config_error
             card.updated_at = utc_now()
             session.add(card)
             session.commit()
@@ -72,26 +156,7 @@ def analyze_card(card_id: str) -> None:
         session.commit()
 
         try:
-            client = genai.Client(api_key=settings.gemini_api_key)
-            contents: list[object] = []
-            if card.type == "image":
-                if not card.image_filename:
-                    raise ValueError("图片文件不存在")
-                image_path = Path(settings.upload_dir) / card.image_filename
-                mime_type = mimetypes.guess_type(image_path.name)[0] or "image/png"
-                contents = [
-                    IMAGE_PROMPT,
-                    types.Part.from_bytes(data=image_path.read_bytes(), mime_type=mime_type),
-                ]
-            else:
-                contents = [TEXT_PROMPT, card.text_content or ""]
-
-            response = client.models.generate_content(
-                model=settings.gemini_model,
-                contents=contents,
-                config=types.GenerateContentConfig(response_mime_type="application/json"),
-            )
-            payload = _clean_json(response.text or "{}")
+            payload = _analyze_with_provider(card)
             summary, keywords = _normalize_result(payload)
             if not summary and not keywords:
                 raise ValueError("AI 返回为空")
