@@ -1,0 +1,1229 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>随心一记</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --panel: rgba(7, 10, 14, 0.72);
+    --line: rgba(255, 255, 255, 0.16);
+    --text: rgba(255, 255, 255, 0.92);
+    --muted: rgba(255, 255, 255, 0.64);
+    --accent: #33d6a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  html,
+  body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: #05070a;
+    color: var(--text);
+    font-family: Inter, "Microsoft YaHei", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  #rain-canvas {
+    position: fixed;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .background-tools {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  button {
+    border: 0;
+    padding: 0;
+    color: inherit;
+    background: none;
+    font: inherit;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  button:active { transform: translateY(1px); }
+
+  .tool-button,
+  .icon-button {
+    display: inline-grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    color: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-radius: 8px;
+    background: rgba(3, 6, 10, 0.48);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    transition: color 160ms ease, border-color 160ms ease, background 160ms ease, opacity 160ms ease;
+  }
+
+  .tool-button:hover,
+  .icon-button:hover,
+  .icon-button.active {
+    color: var(--accent);
+    border-color: rgba(51, 214, 166, 0.52);
+    background: rgba(15, 31, 31, 0.58);
+  }
+
+  .icon-button.saved {
+    color: var(--accent);
+    transform: scale(1.08);
+  }
+
+  .tool-button svg,
+  .icon-button svg {
+    width: 18px;
+    height: 18px;
+    stroke-width: 1.8;
+  }
+
+  .eye-slash {
+    opacity: 0;
+    transform: translate(-7px, 7px);
+    transform-origin: center;
+    transition: opacity 220ms ease, transform 220ms ease;
+  }
+
+  body.card-hidden #toggle-card .eye-slash {
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+
+  .note-shell {
+    position: fixed;
+    inset: 0;
+    z-index: 8;
+    display: grid;
+    place-items: center;
+    padding: 18px;
+    pointer-events: none;
+  }
+
+  .note-card {
+    position: relative;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    width: min(520px, calc(100vw - 28px));
+    height: min(680px, calc(100vh - 44px));
+    min-height: 460px;
+    padding: 34px 36px 22px;
+    pointer-events: auto;
+    overflow: hidden;
+    color: rgba(248, 252, 255, 0.9);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03)),
+      rgba(6, 10, 15, 0.34);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 8px;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.14),
+      0 24px 80px rgba(0, 0, 0, 0.42);
+    backdrop-filter: blur(9px) saturate(126%);
+    -webkit-backdrop-filter: blur(9px) saturate(126%);
+    text-shadow: 0 1px 18px rgba(0, 0, 0, 0.45);
+    transition: opacity 260ms ease, transform 260ms ease, filter 260ms ease;
+  }
+
+  body.card-hidden .note-card {
+    opacity: 0;
+    pointer-events: none;
+    filter: blur(12px);
+    transform: translateY(24px);
+  }
+
+  .note-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 50% 0, rgba(255, 255, 255, 0.18), transparent 32%),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent 18%, transparent 82%, rgba(255, 255, 255, 0.05));
+    opacity: 0.5;
+  }
+
+  .note-header,
+  .page-viewport,
+  .note-footer {
+    position: relative;
+    z-index: 1;
+  }
+
+  .note-header {
+    display: grid;
+    gap: 16px;
+    padding-bottom: 20px;
+    text-align: center;
+  }
+
+  .note-title {
+    min-height: 38px;
+    margin: 0;
+    color: #fff;
+    font-family: "Microsoft YaHei", "Noto Sans SC", ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: clamp(24px, 4vw, 30px);
+    font-weight: 800;
+    line-height: 1.25;
+    letter-spacing: 0;
+    outline: none;
+  }
+
+  .note-title:empty::before,
+  .page-body:empty::before {
+    content: attr(data-placeholder);
+    color: rgba(255, 255, 255, 0.28);
+  }
+
+  .meta-line,
+  .weather-line {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    color: var(--accent);
+    font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    font-size: 17px;
+    font-weight: 700;
+    line-height: 1.3;
+    white-space: pre;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .weather-line {
+    min-height: 24px;
+    color: rgba(236, 244, 249, 0.84);
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .page-viewport {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .page-body {
+    height: 100%;
+    overflow-y: auto;
+    padding: 4px 12px 34px 0;
+    outline: none;
+    color: rgba(255, 255, 255, 0.84);
+    font-family: Georgia, "Times New Roman", "Noto Serif SC", "SimSun", serif;
+    font-size: clamp(17px, 2.35vw, 21px);
+    font-weight: 700;
+    line-height: 1.9;
+    white-space: pre-wrap;
+    word-break: break-word;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+  }
+
+  .page-body::-webkit-scrollbar { width: 6px; }
+  .page-body::-webkit-scrollbar-track { background: transparent; }
+  .page-body::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 99px;
+  }
+
+  .note-card.turn-next .page-viewport { animation: pageInNext 320ms ease; }
+  .note-card.turn-prev .page-viewport { animation: pageInPrev 320ms ease; }
+
+  @keyframes pageInNext {
+    from { opacity: 0; filter: blur(7px); transform: translateX(24px); }
+    to { opacity: 1; filter: blur(0); transform: translateX(0); }
+  }
+
+  @keyframes pageInPrev {
+    from { opacity: 0; filter: blur(7px); transform: translateX(-24px); }
+    to { opacity: 1; filter: blur(0); transform: translateX(0); }
+  }
+
+  .note-footer {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 12px;
+    padding-top: 18px;
+  }
+
+  .footer-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .footer-actions.end { justify-content: flex-end; }
+
+  .icon-button {
+    width: 32px;
+    height: 32px;
+    border-color: transparent;
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .page-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-width: 92px;
+  }
+
+  .page-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 99px;
+    background: rgba(255, 255, 255, 0.22);
+    transition: width 220ms ease, background 220ms ease, opacity 220ms ease;
+  }
+
+  .page-dot.active {
+    width: 22px;
+    background: var(--accent);
+    box-shadow: 0 0 16px rgba(51, 214, 166, 0.42);
+  }
+
+  #image-input { display: none; }
+
+  .drop-ring {
+    position: fixed;
+    inset: 12px;
+    z-index: 9;
+    border: 1px dashed rgba(51, 214, 166, 0);
+    border-radius: 10px;
+    pointer-events: none;
+    transition: border-color 160ms ease, background 160ms ease;
+  }
+
+  body.dragging .drop-ring {
+    border-color: rgba(51, 214, 166, 0.86);
+    background: rgba(51, 214, 166, 0.07);
+  }
+
+  .error {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    color: #fff;
+    text-align: center;
+    background: #05070a;
+  }
+
+  @media (max-width: 620px) {
+    .background-tools {
+      right: 12px;
+      bottom: 12px;
+    }
+
+    .note-shell {
+      padding: 12px;
+      padding-bottom: 62px;
+    }
+
+    .note-card {
+      height: calc(100vh - 88px);
+      min-height: 440px;
+      padding: 30px 22px 18px;
+    }
+
+    .note-header {
+      gap: 14px;
+      padding-bottom: 18px;
+    }
+
+    .weather-line {
+      font-size: 13px;
+      flex-wrap: wrap;
+    }
+
+    .note-footer {
+      grid-template-columns: auto 1fr auto;
+    }
+  }
+</style>
+</head>
+<body>
+<canvas id="rain-canvas"></canvas>
+
+<div class="background-tools">
+  <button id="choose-image" class="tool-button" type="button" title="换背景" aria-label="换背景">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+      <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+      <circle cx="8.5" cy="10.5" r="1.5"></circle>
+      <path d="m21 15-5-5L5 19"></path>
+    </svg>
+  </button>
+  <button id="toggle-card" class="tool-button" type="button" title="隐藏笔记" aria-label="隐藏笔记">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+      <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"></path>
+      <circle cx="12" cy="12" r="3"></circle>
+      <path class="eye-slash" d="M4 20 20 4"></path>
+    </svg>
+  </button>
+</div>
+
+<main class="note-shell">
+  <section id="note-card" class="note-card" aria-label="随心一记">
+    <header class="note-header">
+      <h1 id="note-title" class="note-title" contenteditable="true" spellcheck="false" data-placeholder="标题"></h1>
+      <div class="meta-line">
+        <time id="current-time"></time>
+      </div>
+      <div id="weather-line" class="weather-line">合肥 · 天气同步中</div>
+    </header>
+
+    <div class="page-viewport">
+      <article id="page-body" class="page-body" contenteditable="true" spellcheck="false" data-placeholder="正文"></article>
+    </div>
+
+    <footer class="note-footer" aria-label="页操作">
+      <div class="footer-actions">
+        <button id="delete-page" class="icon-button" type="button" title="删除页" aria-label="删除页">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+            <path d="M3 6h18"></path>
+            <path d="M8 6V4h8v2"></path>
+            <path d="M19 6l-1 14H6L5 6"></path>
+            <path d="M10 11v5"></path>
+            <path d="M14 11v5"></path>
+          </svg>
+        </button>
+        <button id="save-page" class="icon-button" type="button" title="保存" aria-label="保存">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+            <path d="M5 3h12l2 2v16H5z"></path>
+            <path d="M8 3v6h8V3"></path>
+            <path d="M8 17h8"></path>
+          </svg>
+        </button>
+      </div>
+
+      <div id="page-indicator" class="page-indicator" aria-label="页码"></div>
+
+      <div class="footer-actions end">
+        <button id="add-page" class="icon-button" type="button" title="加页" aria-label="加页">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+            <path d="M12 5v14"></path>
+            <path d="M5 12h14"></path>
+          </svg>
+        </button>
+        <button id="prev-page" class="icon-button" type="button" title="上一页" aria-label="上一页">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+            <path d="m15 18-6-6 6-6"></path>
+          </svg>
+        </button>
+        <button id="next-page" class="icon-button" type="button" title="下一页" aria-label="下一页">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+            <path d="m9 18 6-6-6-6"></path>
+          </svg>
+        </button>
+      </div>
+    </footer>
+  </section>
+</main>
+
+<div class="drop-ring" aria-hidden="true"></div>
+<input id="image-input" type="file" accept="image/*">
+
+<script>
+const canvas = document.getElementById('rain-canvas');
+const gl = canvas.getContext('webgl2', { antialias: false, alpha: false });
+
+if (!gl) {
+  document.body.innerHTML = '<div class="error">这个浏览器不支持 WebGL2，换新版 Chrome / Edge 试试。</div>';
+  throw new Error('WebGL2 is not supported');
+}
+
+const VS = `#version 300 es
+in vec2 a_pos;
+void main() {
+  gl_Position = vec4(a_pos, 0.0, 1.0);
+}`;
+
+const FS = `#version 300 es
+precision highp float;
+out vec4 fragColor;
+
+uniform float u_t;
+uniform vec2 u_res;
+uniform vec2 u_bg_res;
+uniform sampler2D u_bg;
+uniform float u_rain;
+uniform float u_blur;
+uniform float u_refr;
+uniform float u_zoom;
+uniform float u_bright;
+
+#define S(a,b,t) smoothstep(a,b,t)
+
+vec3 N13(float p) {
+  vec3 p3 = fract(vec3(p) * vec3(.1031, .11369, .13787));
+  p3 += dot(p3, p3.yzx + 19.19);
+  return fract(vec3((p3.x + p3.y) * p3.z, (p3.x + p3.z) * p3.y, (p3.y + p3.z) * p3.x));
+}
+
+float Saw(float b, float t) {
+  return S(0., b, t) * S(1., b, t);
+}
+
+vec2 DropLayer2(vec2 uv, float t) {
+  vec2 UV = uv;
+  uv.y += t * 0.75;
+  vec2 a = vec2(6., 1.);
+  vec2 grid = a * 2.;
+  vec2 id = floor(uv * grid);
+  float colShift = N13(id.x).x;
+  uv.y += colShift;
+  id = floor(uv * grid);
+  vec3 n = N13(id.x * 35.2 + id.y * 2376.1);
+  vec2 st = fract(uv * grid) - vec2(.5, 0.);
+  float x = n.x - .5;
+  float y = UV.y * 20.;
+  float wiggle = sin(y + sin(y));
+  x += wiggle * (.5 - abs(x)) * (n.z - .5);
+  x *= .7;
+  float ti = fract(t + n.z);
+  y = (Saw(.85, ti) - .5) * .9 + .5;
+  vec2 p = vec2(x, y);
+  float d = length((st - p) * a.yx);
+  float mainDrop = S(.4, .0, d);
+  float r = sqrt(S(1., y, st.y));
+  float cd = abs(st.x - x);
+  float trail = S(.23 * r, .15 * r * r, cd);
+  float trailFront = S(-.02, .02, st.y - y);
+  trail *= trailFront * r * r;
+  y = UV.y;
+  float trail2 = S(.2 * r, .0, cd);
+  float droplets = max(0., (sin(y * (1. - y) * 120.) - st.y)) * trail2 * trailFront * n.z;
+  y = fract(y * 10.) + (st.y - .5);
+  float dd = length(st - vec2(x, y));
+  droplets = S(.3, 0., dd);
+  float m = mainDrop + droplets * r * trailFront;
+  return vec2(m, trail);
+}
+
+float StaticDrops(vec2 uv, float t) {
+  uv *= 40.;
+  vec2 id = floor(uv);
+  uv = fract(uv) - .5;
+  vec3 n = N13(id.x * 107.45 + id.y * 3543.654);
+  vec2 p = (n.xy - .5) * .7;
+  float d = length(uv - p);
+  float fade = Saw(.025, fract(t + n.z));
+  return S(.3, 0., d) * fract(n.z * 10.) * fade;
+}
+
+vec2 Drops(vec2 uv, float t, float l0, float l1, float l2) {
+  float s = StaticDrops(uv, t) * l0;
+  vec2 m1 = DropLayer2(uv, t) * l1;
+  vec2 m2 = DropLayer2(uv * 1.85, t) * l2;
+  float c = s + m1.x + m2.x;
+  c = S(.3, 1., c);
+  return vec2(c, max(m1.y * l0, m2.y * l1));
+}
+
+vec2 coverUv(vec2 uv) {
+  float screenAspect = u_res.x / u_res.y;
+  float imageAspect = u_bg_res.x / u_bg_res.y;
+  vec2 p = (uv - 0.5) / u_zoom + 0.5;
+  if (screenAspect > imageAspect) {
+    p.y = (p.y - 0.5) * (screenAspect / imageAspect) + 0.5;
+  } else {
+    p.x = (p.x - 0.5) * (imageAspect / screenAspect) + 0.5;
+  }
+  return p;
+}
+
+void main() {
+  vec2 fragCoord = gl_FragCoord.xy;
+  vec2 UV = fragCoord / u_res;
+  vec2 uv = (fragCoord - .5 * u_res) / u_res.y;
+  uv /= u_zoom;
+
+  float t = u_t * .2;
+  float rainAmount = u_rain;
+  float minBlur = 0.0;
+  float maxBlur = mix(0.0, 7.5, u_blur / 10.0);
+
+  float staticDrops = S(-.5, 1., rainAmount) * 2.;
+  float layer1 = S(.25, .75, rainAmount);
+  float layer2 = S(.0, .5, rainAmount);
+
+  vec2 c = Drops(uv, t, staticDrops, layer1, layer2);
+  vec2 e = vec2(.001, 0.);
+  float cx = Drops(uv + e, t, staticDrops, layer1, layer2).x;
+  float cy = Drops(uv + e.yx, t, staticDrops, layer1, layer2).x;
+  vec2 n = vec2(cx - c.x, cy - c.x) * u_refr;
+
+  float focus = mix(maxBlur - c.y, minBlur, S(.1, .2, c.x));
+  vec3 col = textureLod(u_bg, coverUv(UV) + n, focus).rgb;
+
+  col += u_bright;
+  col *= mix(vec3(1.), vec3(.80, .90, 1.20), u_blur * 0.05);
+  vec2 vUV = UV - .5;
+  col *= 1. - dot(vUV, vUV) * .5;
+
+  fragColor = vec4(col, 1.);
+}`;
+
+function makeShader(type, source) {
+  const shader = gl.createShader(type);
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    throw new Error(gl.getShaderInfoLog(shader) || 'Shader compile failed');
+  }
+  return shader;
+}
+
+const program = gl.createProgram();
+gl.attachShader(program, makeShader(gl.VERTEX_SHADER, VS));
+gl.attachShader(program, makeShader(gl.FRAGMENT_SHADER, FS));
+gl.linkProgram(program);
+if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+  throw new Error(gl.getProgramInfoLog(program) || 'Program link failed');
+}
+gl.useProgram(program);
+
+const vao = gl.createVertexArray();
+gl.bindVertexArray(vao);
+const buffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+const posLoc = gl.getAttribLocation(program, 'a_pos');
+gl.enableVertexAttribArray(posLoc);
+gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+
+const uniforms = {};
+['u_t', 'u_res', 'u_bg_res', 'u_bg', 'u_rain', 'u_blur', 'u_refr', 'u_zoom', 'u_bright']
+  .forEach(name => uniforms[name] = gl.getUniformLocation(program, name));
+
+const texture = gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D, texture);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+gl.uniform1i(uniforms.u_bg, 0);
+
+let bgSize = { width: 1024, height: 1024 };
+let time = 0;
+let lastTime = 0;
+const BACKGROUND_DB_NAME = 'amado-lite-rain-background-v2';
+const BACKGROUND_STORE_NAME = 'backgrounds';
+const BACKGROUND_RECORD_KEY = 'active';
+const BACKGROUND_DATA_KEY = 'amado-lite-rain-background-data-url-v2';
+
+// 调雨效主要改这里和下面 WEATHER_SCHEMES.rain：
+// rain=雨滴数量，blur=背景模糊，speed=下落速度，refr=雨滴折射，zoom=背景缩放，bright=明暗。
+const params = {
+  rain: 0.55,
+  blur: 3.4,
+  speed: 1.05,
+  refr: 1.35,
+  zoom: 1,
+  bright: 0
+};
+
+const WEATHER_SCHEMES = {
+  rain: { label: '雨', scheme: { rain: 0.3, speed: 1.15, blur: 3.4, refr: 1.25, zoom: 1, bright: 0 } },
+  cloudy: { label: '阴', scheme: { rain: -0.5, speed: 1.0, blur: 3.4, refr: 0, zoom: 1, bright: 0 } },
+  sunny: { label: '晴', scheme: { rain: -0.5, speed: 1.0, blur: 0, refr: 0, zoom: 1, bright: 0 } }
+};
+
+const WEATHER_ALIASES = {
+  rain: 'rain',
+  rainy: 'rain',
+  yu: 'rain',
+  '雨': 'rain',
+  cloudy: 'cloudy',
+  overcast: 'cloudy',
+  yin: 'cloudy',
+  '阴': 'cloudy',
+  '多云': 'cloudy',
+  sunny: 'sunny',
+  clear: 'sunny',
+  qing: 'sunny',
+  '晴': 'sunny'
+};
+
+function applyRainScheme(scheme) {
+  Object.assign(params, scheme);
+}
+
+function weatherFromKey(key) {
+  const weather = WEATHER_SCHEMES[key] || WEATHER_SCHEMES.cloudy;
+  return { key, label: weather.label, scheme: weather.scheme };
+}
+
+function applyWeatherKey(key) {
+  const weather = weatherFromKey(key);
+  activeWeather = weather;
+  applyRainScheme(weather.scheme);
+  return weather;
+}
+
+function getWeatherOverride() {
+  const raw = new URLSearchParams(window.location.search).get('weather');
+  if (!raw) return null;
+
+  const key = raw.trim().toLowerCase();
+  return WEATHER_ALIASES[key] || (WEATHER_SCHEMES[key] ? key : null);
+}
+
+const weatherOverride = getWeatherOverride();
+let activeWeather = weatherFromKey(weatherOverride || 'cloudy');
+
+function uploadSource(source, width, height) {
+  bgSize = { width, height };
+  try {
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    gl.generateMipmap(gl.TEXTURE_2D);
+  } catch (error) {
+    const fallback = createFallbackImage();
+    bgSize = { width: 1200, height: 800 };
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, fallback);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    console.warn('Background texture failed, using fallback texture', error);
+  }
+}
+
+function createFallbackImage() {
+  const fallbackCanvas = document.createElement('canvas');
+  fallbackCanvas.width = 1200;
+  fallbackCanvas.height = 800;
+  const ctx = fallbackCanvas.getContext('2d');
+  ctx.fillStyle = '#05070a';
+  ctx.fillRect(0, 0, 1200, 800);
+  return fallbackCanvas;
+}
+
+function loadBackgroundUrl(src, options = {}) {
+  const image = new Image();
+  image.onload = () => {
+    uploadSource(image, image.naturalWidth || image.width, image.naturalHeight || image.height);
+    if (options.onLoad) options.onLoad();
+    if (options.revoke) URL.revokeObjectURL(src);
+  };
+  image.onerror = () => {
+    if (options.revoke) URL.revokeObjectURL(src);
+    if (options.onError) {
+      options.onError();
+    } else {
+      uploadSource(createFallbackImage(), 1200, 800);
+    }
+  };
+  image.src = src;
+}
+
+function openBackgroundDb() {
+  return new Promise((resolve, reject) => {
+    if (!window.indexedDB) {
+      reject(new Error('IndexedDB is not available'));
+      return;
+    }
+
+    const request = indexedDB.open(BACKGROUND_DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(BACKGROUND_STORE_NAME)) {
+        db.createObjectStore(BACKGROUND_STORE_NAME);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function withBackgroundStore(mode, action) {
+  const db = await openBackgroundDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(BACKGROUND_STORE_NAME, mode);
+    const store = tx.objectStore(BACKGROUND_STORE_NAME);
+    const request = action(store);
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+    tx.oncomplete = () => db.close();
+    tx.onerror = () => {
+      db.close();
+      reject(tx.error);
+    };
+  });
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+async function getSavedBackgroundSource() {
+  try {
+    const blob = await withBackgroundStore('readonly', store => store.get(BACKGROUND_RECORD_KEY));
+    if (blob) {
+      return { src: URL.createObjectURL(blob), revoke: true };
+    }
+  } catch (error) {
+    console.warn('Saved background database unavailable', error);
+  }
+
+  try {
+    const dataUrl = localStorage.getItem(BACKGROUND_DATA_KEY);
+    if (dataUrl) return { src: dataUrl, revoke: false };
+  } catch (error) {
+    console.warn('Saved background fallback unavailable', error);
+  }
+
+  return null;
+}
+
+async function saveBackgroundFile(file) {
+  try {
+    await withBackgroundStore('readwrite', store => store.put(file, BACKGROUND_RECORD_KEY));
+    localStorage.removeItem(BACKGROUND_DATA_KEY);
+    return;
+  } catch (error) {
+    console.warn('Could not save background in IndexedDB, trying localStorage', error);
+  }
+
+  try {
+    localStorage.setItem(BACKGROUND_DATA_KEY, await readFileAsDataUrl(file));
+  } catch (error) {
+    console.warn('Could not persist background image', error);
+  }
+}
+
+async function clearSavedBackground() {
+  try {
+    await withBackgroundStore('readwrite', store => store.delete(BACKGROUND_RECORD_KEY));
+  } catch (error) {
+    console.warn('Could not clear saved background database record', error);
+  }
+
+  try {
+    localStorage.removeItem(BACKGROUND_DATA_KEY);
+  } catch (error) {
+    console.warn('Could not clear saved background fallback record', error);
+  }
+}
+
+async function loadDefaultBackground() {
+  if (new URLSearchParams(window.location.search).has('resetBg')) {
+    await clearSavedBackground();
+  }
+
+  const saved = await getSavedBackgroundSource();
+  if (saved) {
+    loadBackgroundUrl(saved.src, {
+      revoke: saved.revoke,
+      onError: () => uploadSource(createFallbackImage(), 1200, 800)
+    });
+    return;
+  }
+
+  uploadSource(createFallbackImage(), 1200, 800);
+}
+
+loadDefaultBackground();
+
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.max(1, Math.floor(window.innerWidth * dpr));
+  canvas.height = Math.max(1, Math.floor(window.innerHeight * dpr));
+  gl.viewport(0, 0, canvas.width, canvas.height);
+}
+
+function frame(now) {
+  const dt = (now - lastTime) / 1000 || 0;
+  lastTime = now;
+  time += dt * params.speed;
+
+  gl.useProgram(program);
+  gl.uniform1f(uniforms.u_t, time);
+  gl.uniform2f(uniforms.u_res, canvas.width, canvas.height);
+  gl.uniform2f(uniforms.u_bg_res, bgSize.width, bgSize.height);
+  gl.uniform1f(uniforms.u_rain, params.rain);
+  gl.uniform1f(uniforms.u_blur, params.blur);
+  gl.uniform1f(uniforms.u_refr, params.refr);
+  gl.uniform1f(uniforms.u_zoom, params.zoom);
+  gl.uniform1f(uniforms.u_bright, params.bright);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+  requestAnimationFrame(frame);
+}
+
+function loadImage(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+
+  const url = URL.createObjectURL(file);
+  loadBackgroundUrl(url, {
+    revoke: true,
+    onLoad: () => saveBackgroundFile(file)
+  });
+}
+
+document.getElementById('choose-image').addEventListener('click', () => {
+  document.getElementById('image-input').click();
+});
+
+document.getElementById('toggle-card').addEventListener('click', event => {
+  const hidden = document.body.classList.toggle('card-hidden');
+  event.currentTarget.title = hidden ? '显示笔记' : '隐藏笔记';
+  event.currentTarget.setAttribute('aria-label', hidden ? '显示笔记' : '隐藏笔记');
+});
+
+document.getElementById('image-input').addEventListener('change', event => {
+  loadImage(event.target.files[0]);
+  event.target.value = '';
+});
+
+const STORAGE_KEY = 'amado-lite-rain-notes-v1';
+const API_BASE = window.location.protocol === 'file:' ? 'http://127.0.0.1:8765' : '';
+const titleEl = document.getElementById('note-title');
+const bodyEl = document.getElementById('page-body');
+const cardEl = document.getElementById('note-card');
+const indicatorEl = document.getElementById('page-indicator');
+const weatherLineEl = document.getElementById('weather-line');
+const timeEl = document.getElementById('current-time');
+
+function makePage(index) {
+  return {
+    id: String(Date.now()) + '-' + Math.random().toString(36).slice(2, 8),
+    title: '',
+    body: '',
+    weather: ''
+  };
+}
+
+const STARTER_BODY_TEXT = '以下这个 prompt 是我在雨天里留下的一页草稿。\n\n你可以直接改标题，也可以在正文里继续写。正文区域内容多了以后，用鼠标滚轮上下滑动就能继续编辑。';
+
+function stripStarterBody(body) {
+  const value = String(body || '');
+  const probe = document.createElement('div');
+  probe.innerHTML = value;
+  const text = probe.textContent || value;
+  return text.trim() === STARTER_BODY_TEXT.trim() ? '' : value;
+}
+
+function normalizeSavedPage(page, index) {
+  const title = page.title || '';
+  return {
+    id: page.id || String(index + 1),
+    title: /^雨屏 PROMPT \d{2}$/.test(title) ? '' : title,
+    body: stripStarterBody(page.body),
+    weather: page.weather || ''
+  };
+}
+
+function loadPages() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+    if (saved && Array.isArray(saved.pages) && saved.pages.length) {
+      return {
+        pages: saved.pages.map(normalizeSavedPage),
+        index: Math.min(saved.index || 0, saved.pages.length - 1)
+      };
+    }
+  } catch (error) {
+    console.warn('Failed to load notes', error);
+  }
+
+  return {
+    pages: [{
+      id: '1',
+      title: '',
+      body: '',
+      weather: ''
+    }],
+    index: 0
+  };
+}
+
+let noteState = loadPages();
+
+function currentPage() {
+  return noteState.pages[noteState.index];
+}
+
+function saveCurrentPage() {
+  const page = currentPage();
+  page.title = titleEl.textContent.trim();
+  page.body = bodyEl.innerHTML;
+  page.weather = activeWeather.label;
+}
+
+function persistPages() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(noteState));
+}
+
+async function requestJson(path, options = {}) {
+  const response = await fetch(API_BASE + path, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers || {})
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Request failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+async function loadPagesFromBackend() {
+  try {
+    const data = await requestJson('/api/pages');
+    if (!Array.isArray(data.pages) || !data.pages.length) return;
+
+    noteState = {
+      pages: data.pages.map(normalizeSavedPage),
+      index: Math.min(noteState.index || 0, data.pages.length - 1)
+    };
+    persistPages();
+    renderPage();
+  } catch (error) {
+    console.warn('Backend notes unavailable, using local notes', error);
+  }
+}
+
+async function savePagesToBackend() {
+  syncPages();
+  const data = await requestJson('/api/pages/bulk', {
+    method: 'POST',
+    body: JSON.stringify({ pages: noteState.pages })
+  });
+
+  if (Array.isArray(data.pages) && data.pages.length) {
+    noteState.pages = data.pages.map(normalizeSavedPage);
+    persistPages();
+    renderPage();
+  }
+}
+
+async function deletePageFromBackend(pageId) {
+  const data = await requestJson(`/api/pages/${encodeURIComponent(pageId)}`, {
+    method: 'DELETE'
+  });
+
+  return Array.isArray(data.pages) ? data.pages.map(normalizeSavedPage) : [];
+}
+
+function syncPages() {
+  saveCurrentPage();
+  persistPages();
+  renderIndicator();
+}
+
+function renderPage() {
+  const page = currentPage();
+  titleEl.textContent = page.title;
+  bodyEl.innerHTML = page.body;
+  bodyEl.scrollTop = 0;
+  renderIndicator();
+}
+
+function renderIndicator() {
+  indicatorEl.innerHTML = '';
+  noteState.pages.forEach((page, index) => {
+    const dot = document.createElement('button');
+    dot.type = 'button';
+    dot.className = 'page-dot' + (index === noteState.index ? ' active' : '');
+    dot.title = `第 ${index + 1} 页`;
+    dot.setAttribute('aria-label', `第 ${index + 1} 页`);
+    dot.addEventListener('click', () => switchPage(index));
+    indicatorEl.appendChild(dot);
+  });
+}
+
+function switchPage(nextIndex) {
+  if (nextIndex < 0 || nextIndex >= noteState.pages.length || nextIndex === noteState.index) return;
+  const direction = nextIndex > noteState.index ? 'turn-next' : 'turn-prev';
+  syncPages();
+  noteState.index = nextIndex;
+  renderPage();
+  cardEl.classList.remove('turn-next', 'turn-prev');
+  void cardEl.offsetWidth;
+  cardEl.classList.add(direction);
+  window.setTimeout(() => cardEl.classList.remove(direction), 360);
+  persistPages();
+}
+
+document.getElementById('add-page').addEventListener('click', () => {
+  syncPages();
+  noteState.pages.push(makePage(noteState.pages.length));
+  switchPage(noteState.pages.length - 1);
+});
+
+document.getElementById('delete-page').addEventListener('click', async () => {
+  const deletedPageId = currentPage().id;
+  if (noteState.pages.length === 1) {
+    noteState.pages[0] = makePage(0);
+    noteState.pages[0].title = '';
+    noteState.pages[0].body = '';
+    noteState.index = 0;
+  } else {
+    noteState.pages.splice(noteState.index, 1);
+    noteState.index = Math.max(0, noteState.index - 1);
+  }
+  renderPage();
+  persistPages();
+
+  try {
+    const backendPages = await deletePageFromBackend(deletedPageId);
+    if (backendPages.length) {
+      noteState.pages = backendPages;
+      noteState.index = Math.min(noteState.index, noteState.pages.length - 1);
+    } else {
+      noteState.pages = [makePage(0)];
+      noteState.index = 0;
+    }
+    renderPage();
+    persistPages();
+  } catch (error) {
+    console.warn('Backend delete failed, kept local delete only', error);
+  }
+});
+
+document.getElementById('save-page').addEventListener('click', async event => {
+  try {
+    await savePagesToBackend();
+  } catch (error) {
+    syncPages();
+    console.warn('Backend save failed, saved locally only', error);
+  }
+
+  event.currentTarget.classList.add('saved');
+  window.setTimeout(() => event.currentTarget.classList.remove('saved'), 420);
+});
+
+document.getElementById('prev-page').addEventListener('click', () => {
+  switchPage(noteState.index - 1);
+});
+
+document.getElementById('next-page').addEventListener('click', () => {
+  switchPage(noteState.index + 1);
+});
+
+titleEl.addEventListener('input', syncPages);
+bodyEl.addEventListener('input', syncPages);
+renderPage();
+loadPagesFromBackend();
+
+function pad2(value) {
+  return String(value).padStart(2, '0');
+}
+
+function updateClock() {
+  const now = new Date();
+  const stamp = `${String(now.getFullYear()).slice(-2)}.${pad2(now.getMonth() + 1)}.${pad2(now.getDate())}    ${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+  timeEl.textContent = stamp;
+}
+
+function classifyWeather(current) {
+  const code = Number(current.weather_code);
+  const precipitation = Number(current.precipitation || 0);
+  const rain = Number(current.rain || 0);
+  const showers = Number(current.showers || 0);
+  const intensity = Math.max(precipitation, rain, showers);
+
+  const isRainCode = [
+    51, 53, 55, 56, 57,
+    61, 63, 65, 66, 67,
+    80, 81, 82, 95, 96, 99
+  ].includes(code);
+
+  if (isRainCode || intensity > 0) {
+    return weatherFromKey('rain');
+  }
+
+  if (code === 0 || code === 1) {
+    return weatherFromKey('sunny');
+  }
+
+  return weatherFromKey('cloudy');
+}
+
+async function fetchHefeiWeather() {
+  const url = 'https://api.open-meteo.com/v1/forecast?latitude=31.8206&longitude=117.2272&current=temperature_2m,weather_code,precipitation,rain,showers,cloud_cover&timezone=Asia%2FShanghai';
+
+  try {
+    const response = await fetch(url, { cache: 'no-store' });
+    if (!response.ok) throw new Error(`Weather ${response.status}`);
+    const data = await response.json();
+    const current = data.current || {};
+    const weather = classifyWeather(current);
+    activeWeather = weather;
+    applyRainScheme(weather.scheme);
+
+    const temp = Number.isFinite(Number(current.temperature_2m))
+      ? `${Math.round(Number(current.temperature_2m))}°C`
+      : '';
+    const suffix = temp ? ` · ${temp}` : '';
+    weatherLineEl.textContent = `合肥 · ${weather.label}${suffix}`;
+  } catch (error) {
+    applyWeatherKey('cloudy');
+    weatherLineEl.textContent = '合肥 · 阴';
+    console.warn('Weather sync failed', error);
+  }
+}
+
+updateClock();
+setInterval(updateClock, 1000);
+if (weatherOverride) {
+  const weather = applyWeatherKey(weatherOverride);
+  weatherLineEl.textContent = `演示 · ${weather.label}`;
+} else {
+  fetchHefeiWeather();
+  setInterval(fetchHefeiWeather, 30 * 60 * 1000);
+}
+
+document.addEventListener('dragover', event => {
+  event.preventDefault();
+  document.body.classList.add('dragging');
+});
+
+document.addEventListener('dragleave', event => {
+  if (!event.relatedTarget) document.body.classList.remove('dragging');
+});
+
+document.addEventListener('drop', event => {
+  event.preventDefault();
+  document.body.classList.remove('dragging');
+  loadImage(event.dataTransfer.files[0]);
+});
+
+window.addEventListener('resize', resize);
+resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
+
