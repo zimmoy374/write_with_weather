@@ -569,9 +569,9 @@ vec2 coverUv(vec2 uv) {
   float imageAspect = u_bg_res.x / u_bg_res.y;
   vec2 p = (uv - 0.5) / u_zoom + 0.5;
   if (screenAspect > imageAspect) {
-    p.y = (p.y - 0.5) * (screenAspect / imageAspect) + 0.5;
+    p.y = (p.y - 0.5) * (imageAspect / screenAspect) + 0.5;
   } else {
-    p.x = (p.x - 0.5) * (imageAspect / screenAspect) + 0.5;
+    p.x = (p.x - 0.5) * (screenAspect / imageAspect) + 0.5;
   }
   return p;
 }
@@ -1077,6 +1077,7 @@ document.getElementById('image-input').addEventListener('change', event => {
 
 const STORAGE_KEY = 'amado-lite-rain-notes-v1';
 const API_BASE = window.location.protocol === 'file:' ? 'http://127.0.0.1:8765' : '';
+const INSPIRATION_API_BASE = window.INSPIRATION_API_BASE || localStorage.getItem('inspiration-api-base') || 'http://127.0.0.1:8000';
 const titleEl = document.getElementById('note-title');
 const bodyEl = document.getElementById('page-body');
 const cardEl = document.getElementById('note-card');
@@ -1170,6 +1171,30 @@ async function requestJson(path, options = {}) {
   return response.json();
 }
 
+function htmlToPlainText(html) {
+  const probe = document.createElement('div');
+  probe.innerHTML = html || '';
+  return (probe.textContent || '').trim();
+}
+
+async function syncPageToInspiration(page) {
+  if (!INSPIRATION_API_BASE || !page) return;
+
+  await fetch(`${INSPIRATION_API_BASE}/api/raw-inputs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      source: 'vibewriting',
+      externalId: page.id,
+      kind: 'long_note',
+      title: page.title || '随心一记',
+      contentText: htmlToPlainText(page.body),
+      contentHtml: page.body || '',
+      metadata: { weather: page.weather || '' }
+    })
+  });
+}
+
 async function loadPagesFromBackend() {
   try {
     const data = await requestJson('/api/pages');
@@ -1197,6 +1222,9 @@ async function savePagesToBackend() {
     noteState.pages = data.pages.map(normalizeSavedPage);
     persistPages();
     renderPage();
+    syncPageToInspiration(currentPage()).catch(error => {
+      console.warn('Inspiration sync unavailable', error);
+    });
   }
 }
 
